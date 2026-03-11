@@ -232,13 +232,24 @@ public class ParkingDAO {
     // ABONNEMENTS
     // =========================================================================
     public boolean ajouterAbonnement(String matricule, String nomClient, int dureeJours) {
-        String sql = "INSERT INTO abonnements (matricule, nom_client, date_debut, date_fin) " +
-                "VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? DAY))";
+        return ajouterAbonnement(matricule, nomClient, dureeJours, 0.0, "ESPECES", "PAYE", null);
+    }
+
+    public boolean ajouterAbonnement(String matricule, String nomClient, int dureeJours,
+                                     double montant, String modePaiement,
+                                     String statutPaiement, String numTransaction) {
+        String sql = "INSERT INTO abonnements " +
+                "(matricule, nom_client, date_debut, date_fin, montant, mode_paiement, statut_paiement, num_transaction) " +
+                "VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? DAY), ?, ?, ?, ?)";
         try (Connection conn = Database.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setString(1, matricule.toUpperCase());
             ps.setString(2, nomClient);
             ps.setInt(3, dureeJours);
+            ps.setDouble(4, montant);
+            ps.setString(5, modePaiement);
+            ps.setString(6, statutPaiement);
+            ps.setString(7, numTransaction);
             ps.executeUpdate();
             return true;
         } catch (SQLException e) { e.printStackTrace(); }
@@ -261,10 +272,7 @@ public class ParkingDAO {
             Connection conn = Database.getConnection();
             String sql = "SELECT *, DATEDIFF(date_fin, NOW()) as jours_restants FROM abonnements ORDER BY date_fin DESC";
             return conn.createStatement().executeQuery(sql);
-        } catch (SQLException e) {
-            e.printStackTrace();
-            return null;
-        }
+        } catch (SQLException e) { e.printStackTrace(); return null; }
     }
 
     public boolean supprimerAbonnement(int idAbonnement) {
