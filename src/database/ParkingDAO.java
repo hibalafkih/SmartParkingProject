@@ -1,5 +1,5 @@
 package database;
-
+import model.TypeVehicule;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,19 +13,27 @@ public class ParkingDAO {
     // =========================================================================
     // FONCTIONNALITÉ : ENTRÉE
     // =========================================================================
-    public boolean enregistrerEntree(String matricule, int idPlace) {
-        String queryVehicule = "INSERT INTO vehicules (immatriculation, id_place, heure_entree) VALUES (?, ?, NOW())";
+    // =========================================================================
+    // FONCTIONNALITÉ : ENTRÉE
+    // =========================================================================
+    public boolean enregistrerEntree(String matricule, int idPlace, String typeVehicule) {
+        // NOUVEAU : Ajout de type_vehicule dans la requête SQL
+        String queryVehicule = "INSERT INTO vehicules (immatriculation, id_place, type_vehicule, heure_entree) VALUES (?, ?, ?, NOW())";
         String queryPlace    = "UPDATE places SET est_disponible = FALSE WHERE id_place = ?";
 
         try (Connection conn = Database.getConnection()) {
             conn.setAutoCommit(false);
             try (PreparedStatement psV = conn.prepareStatement(queryVehicule);
                  PreparedStatement psP = conn.prepareStatement(queryPlace)) {
+
                 psV.setString(1, matricule);
                 psV.setInt(2, idPlace);
+                psV.setString(3, typeVehicule != null ? typeVehicule : "VOITURE"); // NOUVEAU
                 psV.executeUpdate();
+
                 psP.setInt(1, idPlace);
                 psP.executeUpdate();
+
                 conn.commit();
                 return true;
             } catch (SQLException e) {
@@ -43,7 +51,7 @@ public class ParkingDAO {
         // Vérifier si le véhicule a un abonnement actif
         if (aAbonnementActif(matricule)) {
             String deleteVehicule = "DELETE FROM vehicules WHERE immatriculation = ?";
-            String selectPlace    = "SELECT id_place FROM vehicules WHERE immatriculation = ?";
+            String selectPlace = "SELECT id_place FROM vehicules WHERE immatriculation = ?";
             try (Connection conn = Database.getConnection()) {
                 PreparedStatement psS = conn.prepareStatement(selectPlace);
                 psS.setString(1, matricule);
@@ -61,10 +69,13 @@ public class ParkingDAO {
                 psD.setString(1, matricule);
                 psD.executeUpdate();
                 return 0.0; // Abonné = gratuit
-            } catch (SQLException e) { e.printStackTrace(); }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
 
-        String selectQuery   = "SELECT id_place, heure_entree, TIMESTAMPDIFF(MINUTE, heure_entree, NOW()) as duree FROM vehicules WHERE immatriculation = ?";
+        // NOUVEAU : Ajout de type_vehicule dans le SELECT
+        String selectQuery   = "SELECT id_place, type_vehicule, heure_entree, TIMESTAMPDIFF(MINUTE, heure_entree, NOW()) as duree FROM vehicules WHERE immatriculation = ?";
         String deleteVehicule = "DELETE FROM vehicules WHERE immatriculation = ?";
         String insertHistorique = "INSERT INTO historique_paiements (immatriculation, duree_minutes, montant_paye) VALUES (?, ?, ?)";
 
@@ -76,9 +87,13 @@ public class ParkingDAO {
             if (rs.next()) {
                 int  idPlace = rs.getInt("id_place");
                 long duree   = rs.getLong("duree");
+                String typeVehicule = rs.getString("type_vehicule"); // NOUVEAU
+
+                if (typeVehicule == null) typeVehicule = "VOITURE"; // Sécurité
                 if (duree == 0) duree = 1;
 
-                double montant = (duree / 60.0) * 5.0;
+                // NOUVEAU : Utilisation de votre méthode de calcul dynamique
+                double montant = calculerMontant(duree, typeVehicule);
 
                 conn.createStatement().executeUpdate(
                         "UPDATE places SET est_disponible = TRUE WHERE id_place = " + idPlace);
@@ -96,9 +111,8 @@ public class ParkingDAO {
                 return montant;
             }
         } catch (SQLException e) { e.printStackTrace(); }
-        return -1;
+        return -1.0; // <-- AJOUTEZ CECI
     }
-
     // =========================================================================
     // HISTORIQUE
     // =========================================================================
@@ -136,9 +150,13 @@ public class ParkingDAO {
     public ResultSet getToutesLesPlaces() {
         try {
             Connection conn = Database.getConnection();
-            String sql = "SELECT p.id_place, p.numero_place, p.est_disponible, v.immatriculation " +
-                    "FROM places p LEFT JOIN vehicules v ON p.id_place = v.id_place " +
-                    "ORDER BY p.id_place";
+            // Correction : Suppression de la condition sur date_sortie qui n'existe pas
+            // Correction : Jointure propre entre places et vehicules sur id_place
+            String sql = "SELECT p.id_place, p.numero_place, p.est_disponible, p.type_place, " +
+                    "v.immatriculation, v.type_vehicule " +
+                    "FROM places p " +
+                    "LEFT JOIN vehicules v ON p.id_place = v.id_place " +
+                    "ORDER BY CAST(p.numero_place AS UNSIGNED)";
             return conn.createStatement().executeQuery(sql);
         } catch (SQLException e) {
             e.printStackTrace();
@@ -231,6 +249,30 @@ public class ParkingDAO {
     // =========================================================================
     // ABONNEMENTS
     // =========================================================================
+    // Surcharge : enregistre aussi le paiement
+    public boolean ajouterAbonnement(String matricule, String nomClient, int dureeJours,
+                                     double montant, String modePaiement,
+                                     String statutPaiement, String numTransaction) {
+        // Essayer avec colonnes paiement (apres migration SQL)
+        String sql = "INSERT INTO abonnements (matricule, nom_client, date_debut, date_fin, montant, mode_paiement, statut_paiement, num_transaction) " +
+                "VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? DAY), ?, ?, ?, ?)";
+        try (Connection conn = Database.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, matricule.toUpperCase());
+            ps.setString(2, nomClient);
+            ps.setInt(3, dureeJours);
+            ps.setDouble(4, montant);
+            ps.setString(5, modePaiement);
+            ps.setString(6, statutPaiement);
+            ps.setString(7, numTransaction);
+            ps.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            // Fallback : colonnes paiement pas encore ajoutees -> utiliser methode simple
+            return ajouterAbonnement(matricule, nomClient, dureeJours);
+        }
+    }
+
     public boolean ajouterAbonnement(String matricule, String nomClient, int dureeJours) {
         String sql = "INSERT INTO abonnements (matricule, nom_client, date_debut, date_fin) " +
                 "VALUES (?, ?, NOW(), DATE_ADD(NOW(), INTERVAL ? DAY))";
@@ -276,5 +318,14 @@ public class ParkingDAO {
             return true;
         } catch (SQLException e) { e.printStackTrace(); }
         return false;
+    }
+    // Exemple de calcul lors de l'enregistrement de la sortie
+    public double calculerMontant(long dureeMinutes, String typeVehiculeStr) {
+        if (dureeMinutes <= 15) {
+            return 0.0; // Période de grâce de 15 minutes (Gratuit)
+        }
+
+        TypeVehicule type = TypeVehicule.valueOf(typeVehiculeStr.toUpperCase());
+        return (dureeMinutes / 60.0) * type.getTarifHoraire();
     }
 }

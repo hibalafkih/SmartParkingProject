@@ -206,10 +206,6 @@ public class ParkingGUI extends JFrame {
         return p;
     }
 
-    /**
-     * Dessine une icône géométrique en Java2D selon le code passé.
-     * Aucun emoji, compatible Windows/Linux/Mac.
-     */
     private void drawIcon(Graphics2D g2, String code, int x, int y, int size, Color color) {
         g2.setColor(new Color(color.getRed(), color.getGreen(), color.getBlue(), 40));
         g2.fillRoundRect(x, y, size, size, 6, 6);
@@ -217,25 +213,25 @@ public class ParkingGUI extends JFrame {
         g2.setStroke(new BasicStroke(2f));
         int p = 4;
         switch (code) {
-            case "FREE": // Cercle vert avec coche
+            case "FREE":
                 g2.drawOval(x + p, y + p, size - p*2, size - p*2);
                 g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 g2.drawLine(x + 7, y + size/2, x + size/2 - 1, y + size - 6);
                 g2.drawLine(x + size/2 - 1, y + size - 6, x + size - 5, y + 6);
                 break;
-            case "OCC": // Cercle rouge avec X
+            case "OCC":
                 g2.drawOval(x + p, y + p, size - p*2, size - p*2);
                 g2.setStroke(new BasicStroke(2.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
                 g2.drawLine(x + 7, y + 7, x + size - 7, y + size - 7);
                 g2.drawLine(x + size - 7, y + 7, x + 7, y + size - 7);
                 break;
-            case "REV": // Signe DH / monnaie
+            case "REV":
                 g2.setStroke(new BasicStroke(2f));
                 g2.drawRoundRect(x + p, y + p, size - p*2, size - p*2, 4, 4);
                 g2.setFont(new Font("Segoe UI", Font.BOLD, size - 8));
                 g2.drawString("DH", x + p + 1, y + size - p - 1);
                 break;
-            case "VEH": // Forme voiture simplifiée
+            case "VEH":
                 g2.setStroke(new BasicStroke(2f));
                 int bx = x + 2, by = y + size/2, bw = size - 4, bh = size/3;
                 g2.drawRoundRect(bx, by, bw, bh, 4, 4);
@@ -258,7 +254,6 @@ public class ParkingGUI extends JFrame {
 
         wrapper.add(buildKpiCards(), BorderLayout.NORTH);
 
-        // Progress bar occupation
         JPanel barPanel = new JPanel(new BorderLayout(8, 0));
         barPanel.setOpaque(false);
         barPanel.setBorder(new EmptyBorder(0, 20, 8, 20));
@@ -275,7 +270,6 @@ public class ParkingGUI extends JFrame {
         barPanel.add(barOccupation, BorderLayout.CENTER);
         wrapper.add(barPanel, BorderLayout.CENTER);
 
-        // Onglets
         tabs = new JTabbedPane();
         tabs.setFont(new Font("Segoe UI", Font.BOLD, 12));
         tabs.setBackground(ThemeManager.bg());
@@ -297,7 +291,6 @@ public class ParkingGUI extends JFrame {
 
         wrapper.add(south, BorderLayout.SOUTH);
 
-        // On restructure : kpi + progress + tabs dans un seul panel vertical
         JPanel main = new JPanel(new BorderLayout(0, 0));
         main.setOpaque(false);
         main.add(buildKpiCards(), BorderLayout.NORTH);
@@ -326,7 +319,6 @@ public class ParkingGUI extends JFrame {
         p.setBackground(ThemeManager.card());
         p.add(sp, BorderLayout.CENTER);
 
-        // Barre de recherche résultat
         searchResult = new JLabel(" ");
         searchResult.setFont(new Font("Segoe UI", Font.ITALIC, 12));
         searchResult.setForeground(ThemeManager.ACCENT_CYAN);
@@ -370,7 +362,6 @@ public class ParkingGUI extends JFrame {
         table.setSelectionBackground(new Color(88, 166, 255, 60));
         table.setSelectionForeground(ThemeManager.text());
 
-        // Colonne Statut colorée
         table.getColumnModel().getColumn(3).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable t, Object val, boolean sel, boolean foc, int row, int col) {
@@ -422,7 +413,6 @@ public class ParkingGUI extends JFrame {
     // DONNÉES
     // =========================================================================
     private void chargerDonnees() {
-        // KPI
         int[] stats = dao.getEtatParking();
         lblLibres.setText(String.valueOf(stats[0]));
         lblOccupes.setText(String.valueOf(stats[1]));
@@ -435,12 +425,10 @@ public class ParkingGUI extends JFrame {
             barOccupation.setValue(pct);
             barOccupation.setForeground(pct > 80 ? ThemeManager.ACCENT_RED :
                     pct > 50 ? ThemeManager.ACCENT_ORANGE : ThemeManager.ACCENT_GREEN);
-            // Alerte si parking plein
             if (pct >= 100) NotificationManager.show(this, "[!] Parking complet !", NotificationManager.Type.WARNING);
             else if (pct >= 90) NotificationManager.show(this, "Parking presque plein (" + pct + "%)", NotificationManager.Type.WARNING);
         }
 
-        // Tableau
         tableModel.setRowCount(0);
         try (Connection conn = Database.getConnection()) {
             ResultSet rs = conn.createStatement().executeQuery(
@@ -458,10 +446,7 @@ public class ParkingGUI extends JFrame {
             }
         } catch (SQLException ex) { ex.printStackTrace(); }
 
-        // Plan visuel
         if (mapPanel != null) mapPanel.refreshData();
-
-        // Stats
         if (statsPanel != null) statsPanel.refresh();
 
         repaint();
@@ -471,11 +456,22 @@ public class ParkingGUI extends JFrame {
     // ACTIONS
     // =========================================================================
     private void enregistrerEntree() {
+        // NOUVEAU : On crée le champ texte ET le menu déroulant !
         JTextField matField = new JTextField(14);
-        JPanel form = new JPanel(new GridLayout(1, 2, 10, 0));
+        JComboBox<String> comboType = new JComboBox<>(new String[]{"VOITURE", "MOTO", "CAMION"});
+
+        // On modifie la grille pour qu'elle ait 2 lignes au lieu d'1
+        JPanel form = new JPanel(new GridLayout(2, 2, 10, 10));
         form.setBackground(ThemeManager.card());
-        JLabel lbl = new JLabel("Matricule :"); lbl.setForeground(ThemeManager.text());
-        form.add(lbl); form.add(matField);
+
+        JLabel lblMat = new JLabel("Matricule :");
+        lblMat.setForeground(ThemeManager.text());
+        JLabel lblType = new JLabel("Type Véhicule :");
+        lblType.setForeground(ThemeManager.text());
+
+        // Ajout des éléments au formulaire
+        form.add(lblMat); form.add(matField);
+        form.add(lblType); form.add(comboType);
 
         int r = JOptionPane.showConfirmDialog(this, form, "Enregistrer une Entrée",
                 JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
@@ -484,13 +480,18 @@ public class ParkingGUI extends JFrame {
         String mat = matField.getText().trim().toUpperCase();
         if (mat.isEmpty()) return;
 
+        // On récupère le type choisi
+        String typeChoisi = comboType.getSelectedItem().toString();
+
         try (Connection conn = Database.getConnection()) {
             ResultSet rs = conn.createStatement().executeQuery(
                     "SELECT id_place, numero_place FROM places WHERE est_disponible = TRUE ORDER BY id_place LIMIT 1");
             if (rs.next()) {
                 int idPlace   = rs.getInt(1);
                 String numPlace = rs.getString(2);
-                if (dao.enregistrerEntree(mat, idPlace)) {
+
+                // NOUVEAU : On envoie bien les 3 arguments (Matricule, ID Place, Type)
+                if (dao.enregistrerEntree(mat, idPlace, typeChoisi)) {
                     String abonne = dao.aAbonnementActif(mat) ? " [Abonne]" : "";
                     NotificationManager.show(this, "Vehicule " + mat + abonne + " -> Place P" + numPlace, NotificationManager.Type.SUCCESS);
                     chargerDonnees();
@@ -543,7 +544,6 @@ public class ParkingGUI extends JFrame {
         if (mat.isEmpty()) return;
         String result = dao.rechercherVehicule(mat);
         searchResult.setText(result.replace("\n", "   |   "));
-        // Surligner dans le tableau
         for (int row = 0; row < tableModel.getRowCount(); row++) {
             if (mat.equals(tableModel.getValueAt(row, 0))) {
                 table.setRowSelectionInterval(row, row);
