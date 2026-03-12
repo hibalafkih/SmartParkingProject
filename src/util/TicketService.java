@@ -1,5 +1,7 @@
 package util;
 
+import javax.swing.*;           // <--- AJOUTER POUR JTable
+import java.awt.*;             // <--- AJOUTER POUR Frame
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -27,8 +29,29 @@ public class TicketService {
     }
 
     /**
-     * Sauvegarde le ticket dans un fichier texte localement.
+     * Exporte les données en CSV via le service d'export
      */
+    public static boolean exporterCSV(java.sql.ResultSet rs, String path) {
+        return ExportService.exportToCSV(rs, path);
+    }
+
+    /**
+     * Imprime le contenu d'une JTable en PDF
+     */
+    public static void exporterPDF(JTable table, Frame parent) {
+        try {
+            boolean complete = table.print(JTable.PrintMode.FIT_WIDTH,
+                    new java.text.MessageFormat("Historique des Paiements"),
+                    new java.text.MessageFormat("Page {0}"));
+            if (complete) {
+                NotificationManager.show(parent, "Impression terminée", NotificationManager.Type.SUCCESS);
+            }
+        } catch (java.awt.print.PrinterException e) {
+            e.printStackTrace();
+            NotificationManager.show(parent, "Erreur d'impression", NotificationManager.Type.ERROR);
+        }
+    }
+
     public static void sauvegarderFichier(String matricule, String contenu) {
         String filename = "ticket_" + matricule + "_" + System.currentTimeMillis() + ".txt";
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename))) {

@@ -1,4 +1,4 @@
-package view;
+package view.admin;
 
 import database.ParkingDAO;
 import util.ThemeManager;
